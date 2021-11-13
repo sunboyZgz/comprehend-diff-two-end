@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>双端对比</title>
+  <style>
+    #line1,
+    #line2,
+    #line3 {
+      height: 150px;
+    }
+
+    #line1,
+    #line2,
+    #line3 {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #line1>div,
+    #line2>div,
+    #line3>div {
+      height: 100px;
+      width: 100px;
+      margin: 0 10px;
+    }
+
+    #line1>div {
+      background-color: red;
+    }
+
+    #line2>div {
+      background-color: blue;
+    }
+
+    #line3>div {
+      background-color: green;
+    }
+
+    .disappear {
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    .appear {
+      opacity: 1;
+      transition: opacity 0.5s;
+    }
+  </style>
+</head>
+
+<body>
+  <div>old children</div>
+  <div id="line1"></div>
+  <hr>
+  <div>new children</div>
+  <div id="line2"></div>
+  <hr>
+  <div>result children</div>
+  <div id="line3"></div>
+  <hr>
+  <button id="update">更新</button>
+</body>
+<script>
+  const line1 = document.getElementById("line1")
+  const line2 = document.getElementById("line2")
+  const line3 = document.getElementById("line3")
+  function createEl({ text, tag = "div", key, data = "" }) {
+    const dom = document.createElement(tag)
+    dom.innerText = `${text} 
+    key:${key}
+    `
+    return dom
+  }
+  function addToLine(queue, lineDom) {
+    const newQueue = queue.map(el => ({
+      el: createEl(el),
+      tag: el.tag || "div",
+      text: el.text,
+      key: el.key
+    }))
+    lineDom.append(...newQueue.map(el => el.el))
+    return newQueue
+  }
+  function removeEl(key) {
+    const el = findKeyNode(resutlQueue, key).el
+    console.log(el)
+    if (el) {
+      el.classList.remove("appear")
+      el.classList.add("disappear")
+      let timer = setTimeout(() => {
+        el.parentNode.removeChild(el)
+        clearTimeout(timer)
+        timer = null
+      }, 500);
+    } else {
+      console.warn(`找不到节点`)
+    }
+  }
+  function vremove(el) {
+    el.classList.add("disappear")
+    el.classList.remove("appear")
+  }
+  function insert(dom, ref, parentNode) {
+    // const dom = document.createElement(vnode.tag)
+    // const dom = vnode.el
+    vremove(dom)
+    // dom.style.opacity = 0
+    let timer1 = setTimeout(() => {
+      parentNode.insertBefore(dom, ref)
+      clearTimeout(timer1)
+      let timer2 = setTimeout(() => {
+        dom.classList.add("appear")
+        dom.classList.remove("disappear")
+        clearTimeout(timer2)
+      }, 500);
+    }, 500);
+  }
+
+  function findKeyNode(queue, key) {
+    for (let i = 0; i < queue.length; i++) {
+      if (queue[i].key === key) {
+        return queue[i]
+      }
+    }
+    return false
+  }
+  function changeResultQ(oldkey, ref, pnode = line3) {
+    const dom = typeof oldkey === 'object' ? oldkey : findKeyNode(resutlQueue, oldkey).el
+    // const dom = findKeyNode(resutlQueue, oldkey).el
+    const { key, isNextSibling } = ref
+    let refDom = null
+    if (isNextSibling) {
+      refDom = findKeyNode(resutlQueue, key).el.nextSibling
+    } else {
+      refDom = findKeyNode(resutlQueue, key).el
+    }
+    insert(dom, refDom, pnode)
+  }
+  function patch(oldQueue, newQueue) {
+    let oldStartIdx = 0, newStartIdx = 0
+    let oldEndIdx = oldQueue.length - 1, newEndIdx = newQueue.length - 1
+    let oldStart = oldQueue[oldStartIdx], newStart = newQueue[newStartIdx]
+    let oldEnd = oldQueue[oldEndIdx], newEnd = newQueue[newEndIdx]
+    return () => {
+      console.log(`oldStartIdx:${oldStartIdx};oldEndIdx:${oldEndIdx},newStartIdx:${newStartIdx};newEndIdx:${newEndIdx}`)
+      if (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+        if (oldStart === null) {
+          oldStart = oldQueue[++oldStartIdx]
+        } else if (oldEnd === null) {
+          oldEnd = oldQueue[--oldEndIdx]
+        } else if (oldStart.key === newStart.key) {
+          oldStart = oldQueue[++oldStartIdx]
+          newStart = newQueue[++newStartIdx]
+        } else if (oldEnd.key === newEnd.key) {
+          oldEnd = oldQueue[--oldEndIdx]
+          newEnd = newQueue[--newEndIdx]
+        } else if (oldStart.key === newEnd.key) {
+          changeResultQ(oldStart.key, { key: oldEnd.key, isNextSibling: true })
+          oldStart = oldQueue[++oldStartIdx]
+          newEnd = newQueue[--newEndIdx]
+        } else if (newStart.key === oldEnd.key) {
+          console.log("444")
+          changeResultQ(oldEnd.key, { key: oldStart.key, isNextSibling: false })
+          oldEnd = oldQueue[--oldEndIdx]
+          newStart = newQueue[++newStartIdx]
+        } else {
+          //非理想情况遍历
+          //以上四张策略都不能实现，直接找到和newStart的key相同的node
+          const index = oldQueue.findIndex(item => item.key === newStart.key)
+          if (index > -1) {
+            changeResultQ(oldQueue[index].key, { key: oldStart.key, isNextSibling: false })
+            oldQueue[index] = null
+            newStart = newQueue[++newStartIdx]
+          } else {
+            const dom = createEl(newStart)
+            changeResultQ(dom, { key: oldStart.key, isNextSibling: false })
+            newStart = newQueue[++newStartIdx]
+          }
+        }
+      }
+      if (oldStartIdx > oldEndIdx && newStartIdx <= newEndIdx) {
+        const dom = createEl(newQueue[newStartIdx])
+        const location = newEndIdx + 1
+        changeResultQ(dom, { key: newQueue[location].key, isNextSibling: false })
+        newStartIdx++
+      } else if (newStartIdx > newEndIdx && oldStartIdx <= oldEndIdx) {
+        removeEl(oldStart.key)
+        oldStart = oldQueue[++oldStartIdx]
+      }
+      // else {
+      //   console.log("alert")
+      //   window.alert("比对结束")
+      // }
+    }
+  }
+  const btn = document.getElementById("update")
+  const el1 = { text: "div1", key: 1 }, el2 = { text: "div2", key: 2 }, el3 = { text: "div3", key: 3 }, el4 = { text: "div4", key: 4 }, el5 = { text: "div5", key: 5 }
+  const el6 = { text: "div6", key: 6 }
+  //demo0 start-start  end-end
+  // const queue1 = [el1, el2, el3]
+  // const queue2 = [el1, el4, el3]
+  // const oldQueue = addToLine(queue1, line1)
+  // const newQueue = addToLine(queue2, line2)
+  // const resutlQueue = addToLine(queue1, line3)
+
+  //demo1 start-end
+  // const queue1 = [el1, el2, el3, el4, el5]
+  // const queue2 = [el5, el4, el3, el2, el1]
+  // const oldQueue = addToLine(queue1, line1)
+  // const newQueue = addToLine(queue2, line2)
+  // const resutlQueue = addToLine(queue1, line3)
+  //demo2 end-start
+  // const queue1 = [el2, el3, el1, el4, el5]
+  // const queue2 = [el5, el4, el3, el2, el1]
+  // const oldQueue = addToLine(queue1, line1)
+  // const newQueue = addToLine(queue2, line2)
+  // const resutlQueue = addToLine(queue1, line3)
+  //demo3 非理想的条件1/2
+  // const queue1 = [el1, el2, el3, el5, el4]
+  // const queue2 = [el6, el2, el3, el4, el1, el5]
+  // const oldQueue = addToLine(queue1, line1)
+  // const newQueue = addToLine(queue2, line2)
+  // const resutlQueue = addToLine(queue1, line3)
+  //demo4 while循环的遗漏 newQueue的遗漏
+  const queue1 = [el1, el2, el3]
+  const queue2 = [el1, el6, el4, el2, el3]
+  const oldQueue = addToLine(queue1, line1)
+  const newQueue = addToLine(queue2, line2)
+  const resutlQueue = addToLine(queue1, line3)
+  //demo5 while循环的遗漏 oldQueue的遗漏
+  // const queue1 = [el1, el2, el3]
+  // const queue2 = [el1]
+  // const oldQueue = addToLine(queue1, line1)
+  // const newQueue = addToLine(queue2, line2)
+  // const resutlQueue = addToLine(queue1, line3)
+
+  btn.onclick = patch(oldQueue, newQueue)
+
+</script>
+
+</html>
